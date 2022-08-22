@@ -16,7 +16,7 @@ use constants::*;
 use errors::*;
 use utils::*;
 
-declare_id!("GrJ6CZRBngTDu4cEPPJm2Y6JnzSRGChShAvcnzKoTLJo");
+declare_id!("EjmMXoVY1ppDMxK4H8nhsfGGFyq77eW9M54aRhMga7cZ");
 
 #[program]
 pub mod spin {
