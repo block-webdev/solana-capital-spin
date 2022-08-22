@@ -40,6 +40,9 @@ pub struct UserPendingClaimState {
 
     pub pending_mint_list: [Pubkey; REWARD_TOKEN_COUNT_PER_ITEM],
     pub pending_amount_list: [u64; REWARD_TOKEN_COUNT_PER_ITEM],
+    pub is_claimed_list: [bool; REWARD_TOKEN_COUNT_PER_ITEM],
+    pub is_sol: bool,
+    pub sol_amount: u64,
     pub count: u8,
 }
 

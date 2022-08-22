@@ -7,8 +7,8 @@ pub const USER_STATE_SEED: &[u8] = b"USER_STATE_SEED";
 pub const ADMIN_LIST_SEED: &[u8] = b"ADMIN_LIST_SEED";
 pub const VAULT_SEED: &[u8] = b"SOL_VAULT";
 
-pub const DUST_VAULT_SEED: &str = "DUST_VAULT_SEED";
-pub const FORGE_VAULT_SEED: &str = "FORGE_VAULT_SEED";
+pub const ITEM_LIST_SEED: &[u8] = b"spin-wheel-pool";
+
 
 pub const SPIN_ITEM_COUNT: usize = 15;
 pub const REWARD_TOKEN_COUNT_PER_ITEM: usize = 10;

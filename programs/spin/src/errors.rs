@@ -13,4 +13,10 @@ pub enum SpinError {
 
     #[msg("Incorrect Claim Amount")]
     ClaimAmountError,
+
+    #[msg("Incorrect SuperAdmin or Admin")]
+    IncorrectSuperAdminOrAdmin,
+
+    #[msg("Invalid Reward")]
+    InvalidReward,
 }

@@ -16,7 +16,7 @@ use constants::*;
 use errors::*;
 use utils::*;
 
-declare_id!("DR5ExZHnbzat9yBqLBdpx52gTpH6snR6712HuTp4y6ei");
+declare_id!("GrJ6CZRBngTDu4cEPPJm2Y6JnzSRGChShAvcnzKoTLJo");
 
 #[program]
 pub mod spin {
@@ -42,15 +42,38 @@ pub mod spin {
         sol_price: u64,
         dust_price: u64,
         forge_price: u64,
+        dev_fee: u64,
+        dev_wallet: Pubkey,
+        is_use_paytoken: bool,
     ) -> Result<()> {
         msg!("initialize");
+        let accts = ctx.accounts;
+        let pool = &mut accts.pool;
 
-        let pool = &mut ctx.accounts.pool;
-        pool.dust_mint = ctx.accounts.dust_mint.key();
-        pool.forge_mint = ctx.accounts.forge_mint.key();
+        let mut is_admin = false;
+        for i in 0..accts.admin_info.count {
+            if accts.admin_info.admin_list[i as usize].eq(&accts.admin.key()) {
+                is_admin = true;
+                break;
+            }
+        }
+
+        require!(is_admin || pool.superadmin.eq(&accts.admin.key()),
+            SpinError::IncorrectSuperAdminOrAdmin
+        );
+
+        if is_use_paytoken == true {
+            pool.dust_mint = accts.dust_mint.key();
+            pool.forge_mint = accts.forge_mint.key();
+        }
         pool.sol_price = sol_price;
         pool.dust_price = dust_price;
         pool.forge_price = forge_price;
+
+        if pool.superadmin.eq(&accts.admin.key()) {
+            pool.dev_fee = dev_fee;
+            pool.dev_wallet = dev_wallet;
+        }
 
         Ok(())
     }
@@ -88,7 +111,7 @@ pub mod spin {
         Ok(())
     }
 
-    pub fn spin_wheel(ctx: Context<PlayGame>, rand: u32, _round_id: u64, pay_mode: u8,) -> Result<u8> {
+    pub fn spin_wheel(ctx: Context<PlayGame>, rand: u32, _round_id: u64, pay_mode: u8,) -> Result<()> {
         let accts = ctx.accounts;
 
         // pay
@@ -186,24 +209,59 @@ pub mod spin {
         accts.user_pendingstate.user = accts.user.key();
         accts.user_pendingstate.is_claimed = 0;
         accts.user_pendingstate.round_num = accts.user_state.round_num;
+        accts.user_pendingstate.is_sol = state.token_type_list[state.last_spinindex as usize] == 2;
+        if accts.user_pendingstate.is_sol {
+            accts.user_pendingstate.sol_amount = amount;
+        }
 
-        return Ok(state.last_spinindex);
+        Ok(())
     }
 
     pub fn claim(
         ctx : Context<Claim>,
         amount: u64,
+        is_sol: bool,
         ) -> Result<()> {
+        let user_pendingstate = &mut ctx.accounts.user_pendingstate;
+        let reward_mint = ctx.accounts.source_reward_account.mint;
 
-        let (_vault_authority, vault_authority_bump) =
-        Pubkey::find_program_address(&[ESCROW_PDA_SEED.as_ref()], ctx.program_id);
-        let authority_seeds = &[&ESCROW_PDA_SEED.as_bytes()[..], &[vault_authority_bump]];
+        if is_sol == true {
+            require!(user_pendingstate.is_sol && user_pendingstate.is_claimed == 0 && amount == user_pendingstate.sol_amount, SpinError::InvalidReward);
 
-        token::transfer(
-            ctx.accounts.into_transfer_to_pda_context()
-                .with_signer(&[&authority_seeds[..]]),
-        amount,
-        )?;
+            let bump = ctx.bumps.get("vault").unwrap();
+            invoke_signed(
+                &system_instruction::transfer(&ctx.accounts.vault.key(), &ctx.accounts.owner.key(), amount),
+                &[
+                    ctx.accounts.vault.to_account_info().clone(),
+                    ctx.accounts.owner.clone(),
+                    ctx.accounts.system_program.to_account_info().clone(),
+                ],
+                &[&[VAULT_SEED, &[*bump]]],
+            )?;
+        } else {
+            let mut is_found = false;
+            let mut found_idx = 0;
+
+            for i in 0..user_pendingstate.count {
+                if user_pendingstate.pending_mint_list[i as usize].eq(&reward_mint) && user_pendingstate.is_claimed_list[i as usize] == false {
+                    is_found = true;
+                    found_idx = i;
+                    break;
+                }
+            }
+
+            require!(is_found, SpinError::InvalidReward);
+
+            let (_vault_authority, vault_authority_bump) =
+            Pubkey::find_program_address(&[ESCROW_PDA_SEED.as_ref()], ctx.program_id);
+            let authority_seeds = &[&ESCROW_PDA_SEED.as_bytes()[..], &[vault_authority_bump]];
+
+            token::transfer(
+                ctx.accounts.into_transfer_to_pda_context()
+                    .with_signer(&[&authority_seeds[..]]),
+            amount,
+            )?;
+        }
 
         Ok(())
     }
@@ -289,15 +347,17 @@ pub struct Initialize<'info> {
 pub struct SetPayInfo<'info> {
     /// CHECK: This is not dangerous because we don't read or write from this account
     #[account(mut)]
-    pub initializer: Signer<'info>,
+    pub admin: Signer<'info>,
 
     #[account(
         mut,
         seeds=[ESCROW_PDA_SEED.as_ref()],
         bump,
-        constraint = pool.superadmin == initializer.key(),
     )]
     pub pool : Box<Account<'info, Pool>>,
+
+    #[account(mut)]
+    pub admin_info : Account<'info, AdminInfo>,
 
     // dust mint
     pub dust_mint: Account<'info, Mint>,
@@ -308,6 +368,18 @@ pub struct SetPayInfo<'info> {
 
 #[derive(Accounts)]
 pub struct SpinWheel<'info> {
+    /// CHECK: This is not dangerous because we don't read or write from this account
+    #[account(mut)]
+    pub superadmin: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds=[ESCROW_PDA_SEED.as_ref()],
+        bump,
+        constraint = pool.superadmin == superadmin.key(),
+    )]
+    pub pool : Box<Account<'info, Pool>>,
+
     #[account(mut)]
     pub state : AccountLoader<'info, SpinItemList>,
 }
@@ -370,7 +442,8 @@ pub struct PlayGame<'info> {
 
     // source account
     #[account(mut)]
-    pub source_account: Box<Account<'info, TokenAccount>>,
+    /// CHECK: this should be checked with address in pool
+    pub source_account: AccountInfo<'info>,
 
     #[account(
         mut,
@@ -407,16 +480,31 @@ pub struct Claim<'info> {
     #[account(mut, seeds=[ESCROW_PDA_SEED.as_ref()], bump)]
     pub pool : Box<Account<'info, Pool>>,
 
-    /// CHECK: This is not dangerous because we don't read or write from this account
-    #[account(mut,owner=spl_token::id())]
-    pub source_reward_account : AccountInfo<'info>,
+    #[account(
+        mut,
+        seeds = [VAULT_SEED],
+        bump
+    )]
+    /// CHECK: this should be checked with address in pool
+    pub vault: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        constraint = owner.key() == user_pendingstate.user
+    )]
+    pub user_pendingstate: Box<Account<'info, UserPendingClaimState>>,
 
     /// CHECK: This is not dangerous because we don't read or write from this account
-    #[account(mut,owner=spl_token::id())]
-    pub dest_reward_account : AccountInfo<'info>,
+    #[account(mut)]
+    pub source_reward_account: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: This is not dangerous because we don't read or write from this account
+    #[account(mut)]
+    pub dest_reward_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: This is not dangerous because we don't read or write from this account
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 impl<'info> Claim<'info> {
