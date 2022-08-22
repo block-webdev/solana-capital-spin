@@ -16,7 +16,7 @@ use constants::*;
 use errors::*;
 use utils::*;
 
-declare_id!("EjmMXoVY1ppDMxK4H8nhsfGGFyq77eW9M54aRhMga7cZ");
+declare_id!("GSZNsGYUVXeisnKaKQ2mN6YQZScmWRG2wFnybX7F8Buj");
 
 #[program]
 pub mod spin {
@@ -102,11 +102,13 @@ pub mod spin {
         token_type: u8,
         ratio: u32,
         amount: u64,
+        item_count: u8,
     ) -> Result<()> {
         msg!("set_item");
 
         let mut state = ctx.accounts.state.load_mut()?;
         state.set_spinitem(index, ItemRewardMints{item_mint_list, count}, token_type, ratio, amount)?;
+        state.count = item_count;
 
         Ok(())
     }
@@ -139,6 +141,10 @@ pub mod spin {
             )?;
         } else if pay_mode == 1 {
             // dust
+            require!(
+                accts.pool.dust_mint.eq(&accts.dust_mint.key()),
+                SpinError::IncorreectDustMintKey
+            );
             let cpi_ctx = CpiContext::new(
                 accts.token_program.to_account_info(),
                 anchor_spl::token::Transfer {
@@ -158,6 +164,10 @@ pub mod spin {
             }
         } else  {
             // forge
+            require!(
+                accts.pool.forge_mint.eq(&accts.forge_mint.key()),
+                SpinError::IncorreectForgeMintKey
+            );
             let cpi_ctx = CpiContext::new(
                 accts.token_program.to_account_info(),
                 anchor_spl::token::Transfer {
@@ -415,7 +425,7 @@ pub struct PlayGame<'info> {
     pub user_pendingstate: Box<Account<'info, UserPendingClaimState>>,
 
     // dust mint
-    #[account(mut, address = pool.dust_mint)]
+    #[account(mut)]
     pub dust_mint: Box<Account<'info, Mint>>,
 
     // dust vault that holds the dust mint for distribution
@@ -428,7 +438,7 @@ pub struct PlayGame<'info> {
     pub dust_vault: Box<Account<'info, TokenAccount>>,
 
     // forge mint
-    #[account(mut, address = pool.forge_mint)]
+    #[account(mut)]
     pub forge_mint: Box<Account<'info, Mint>>,
 
     // forge vault that holds the pay mint for distribution

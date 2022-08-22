@@ -1,13 +1,13 @@
 [features]
 seeds = false
 [programs.localnet]
-spin = "EjmMXoVY1ppDMxK4H8nhsfGGFyq77eW9M54aRhMga7cZ"
+spin = "GSZNsGYUVXeisnKaKQ2mN6YQZScmWRG2wFnybX7F8Buj"
 
 [programs.devnet]
-spin = "EjmMXoVY1ppDMxK4H8nhsfGGFyq77eW9M54aRhMga7cZ"
+spin = "GSZNsGYUVXeisnKaKQ2mN6YQZScmWRG2wFnybX7F8Buj"
 
 [programs.mainnet]
-spin = "EjmMXoVY1ppDMxK4H8nhsfGGFyq77eW9M54aRhMga7cZ"
+spin = "GSZNsGYUVXeisnKaKQ2mN6YQZScmWRG2wFnybX7F8Buj"
 
 [registry]
 url = "https://anchor.projectserum.com"

@@ -19,4 +19,10 @@ pub enum SpinError {
 
     #[msg("Invalid Reward")]
     InvalidReward,
+
+    #[msg("Invalid Dust Mint Key")]
+    IncorreectDustMintKey,
+
+    #[msg("Invalid Forge Mint Key")]
+    IncorreectForgeMintKey,
 }
