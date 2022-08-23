@@ -16,7 +16,7 @@ use constants::*;
 use errors::*;
 use utils::*;
 
-declare_id!("GSZNsGYUVXeisnKaKQ2mN6YQZScmWRG2wFnybX7F8Buj");
+declare_id!("GgRis87KSDgfzYWup1Y7ByZiAECXR7siKbES4Ff4UCCp");
 
 #[program]
 pub mod spin {
@@ -115,10 +115,12 @@ pub mod spin {
 
     pub fn spin_wheel(ctx: Context<PlayGame>, rand: u32, _round_id: u64, pay_mode: u8,) -> Result<()> {
         let accts = ctx.accounts;
+        let mut pay_amount = 0;
 
         // pay
         if pay_mode == 0 {
             // sol
+            pay_amount = accts.pool.sol_price;
             let sol_fee = dev_fee(&accts.pool, accts.pool.sol_price)?;
             let real_sol = accts.pool.sol_price.checked_sub(sol_fee).unwrap();
 
@@ -162,6 +164,7 @@ pub mod spin {
                 let amount = accts.pool.dust_price / ((10 as u64).pow(sub_decimals as u32));
                 anchor_spl::token::transfer(cpi_ctx, amount)?;
             }
+            pay_amount = accts.pool.dust_price;
         } else  {
             // forge
             require!(
@@ -186,6 +189,7 @@ pub mod spin {
                 let amount = accts.pool.forge_price / ((10 as u64).pow(sub_decimals as u32));
                 anchor_spl::token::transfer(cpi_ctx, amount)?;
             }
+            pay_amount = accts.pool.forge_price;
         }
 
         if accts.user_state.is_initialized == 0 {
@@ -224,6 +228,13 @@ pub mod spin {
             accts.user_pendingstate.sol_amount = amount;
         }
 
+        let mut one_rmint = Pubkey::default();
+        if reward_mints.count > 0 {
+            one_rmint = reward_mints.item_mint_list[0];
+        }
+
+        accts.last_users.push_front_last_user(accts.user.key(), pay_amount, amount, one_rmint, state.token_type_list[state.last_spinindex as usize]);
+
         Ok(())
     }
 
@@ -233,7 +244,6 @@ pub mod spin {
         is_sol: bool,
         ) -> Result<()> {
         let user_pendingstate = &mut ctx.accounts.user_pendingstate;
-        let reward_mint = ctx.accounts.source_reward_account.mint;
 
         if is_sol == true {
             require!(user_pendingstate.is_sol && user_pendingstate.is_claimed == 0 && amount == user_pendingstate.sol_amount, SpinError::InvalidReward);
@@ -249,6 +259,7 @@ pub mod spin {
                 &[&[VAULT_SEED, &[*bump]]],
             )?;
         } else {
+            let reward_mint = ctx.accounts.source_reward_account.mint;
             let mut is_found = false;
             let mut found_idx = 0;
 
@@ -327,7 +338,6 @@ pub mod spin {
         ctx.accounts.admin_info.delete_admin(ctx.accounts.admin.key())?;
         Ok(())
     }
-
 }
 
 #[derive(Accounts)]
@@ -338,6 +348,9 @@ pub struct Initialize<'info> {
 
     #[account(init, seeds=[ESCROW_PDA_SEED.as_ref()], bump, payer=initializer, space=size_of::<Pool>() + 8)]
     pub pool : Box<Account<'info, Pool>>,
+
+    #[account(init, seeds=[LAST_USERS_SEED.as_ref()], bump, payer=initializer, space=size_of::<LatestUsers>() + 8)]
+    pub last_users : Box<Account<'info, LatestUsers>>,
 
     /// CHECK: This is not dangerous because we don't read or write from this account
     pub super_admin: AccountInfo<'info>,
@@ -402,6 +415,9 @@ pub struct PlayGame<'info> {
 
     #[account(mut, seeds=[ESCROW_PDA_SEED.as_ref()], bump)]
     pub pool : Box<Account<'info, Pool>>,
+
+    #[account(mut)]
+    pub last_users : Box<Account<'info, LatestUsers>>,
 
     #[account(mut)]
     pub state : AccountLoader<'info, SpinItemList>,

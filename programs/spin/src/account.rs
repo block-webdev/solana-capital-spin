@@ -185,3 +185,42 @@ impl SpinItemList {
         }
     }
 }
+
+#[account]
+#[derive(Default)]
+pub struct LatestUsers {
+    pub user_list: [Pubkey; MAX_LATEST_USER_COUNT],
+    pub count: u8,
+    pub pay_amount: [u64; MAX_LATEST_USER_COUNT],
+    pub reward_amount: [u64; MAX_LATEST_USER_COUNT],
+    pub reward_mint: [Pubkey; MAX_LATEST_USER_COUNT],
+    pub reward_type: [u8; MAX_LATEST_USER_COUNT],
+}
+
+
+impl LatestUsers {
+    pub fn push_front_last_user(&mut self, user: Pubkey, pay_amount: u64, reward_amount: u64, reward_mint: Pubkey, reward_type: u8) -> Result<()> {
+        if self.count > 0 {
+            for i in (0..self.count).rev() {
+                if i >= MAX_LATEST_USER_COUNT as u8 - 1 {
+                    continue;
+                }
+                self.user_list[(i + 1) as usize] = self.user_list[i as usize];
+                self.pay_amount[(i + 1) as usize] = self.pay_amount[i as usize];
+                self.reward_amount[(i + 1) as usize] = self.reward_amount[i as usize];
+                self.reward_mint[(i + 1) as usize] = self.reward_mint[i as usize];
+                self.reward_type[(i + 1) as usize] = self.reward_type[i as usize];
+            }
+        }
+
+        self.user_list[0] = user;
+        self.pay_amount[0] = pay_amount;
+        self.reward_amount[0] = reward_amount;
+        self.reward_mint[0] = reward_mint;
+        self.reward_type[0] = reward_type;
+
+        self.count += 1;
+
+        Ok(())
+    }
+}
